@@ -1,29 +1,49 @@
 """
 Library for quickly converting a console application into a gui application.
+Includes threading and queues, custom commands, and redirecting stdout.
+All non-looping processes wait for printing to complete.
 """
 
+import queue
+import threading
 from tkinter import *
 from tkinter import ttk
-import sys
+
+# Create queue which holds items to be printed to gui textbox
+print_queue = queue.Queue()
+
+# Create queue which holds code to be processed
+process_queue = queue.Queue()
 
 
 class Redirect:
-    # Redirect class is the replacement for sys.stdout
+    """
+    Redirects the text output from print statements, and places them in print queue
+    """
     def __init__(self, target):
+
         self.output = target
 
-    def write(self, txt):
-        # Inserts captured output into text area on gui
-        self.output.insert(END, str(txt))
+    @staticmethod
+    def write(txt):
+        """
+        Inserts captured output into text area on gui
+        """
+        global print_queue
+        print_queue.put(str(txt))
+        # self.output.insert(END, str(txt)) # print to gui without threading or queue
 
     def flush(self):  # TODO: Handle stdout and stderr functions
         pass
 
 
 class CmdGUI:
-    # Class that handles gui creation and interactions
+    """
+    Handles gui creation and interactions
+    Arg: commands = dictionary of text command : code to run
+    """
     def __init__(self, commands):
-        # Takes commands argument as a dict of command: "code to execute" in the gui
+
         self.commands = commands
 
         # Create main window # TODO: Themes and Styles
@@ -33,7 +53,7 @@ class CmdGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        # Create Frame covering entire window
+        # Create Frame covering entire window (for styling, no practical use)
         self.mainframe = ttk.Frame(self.root, padding=(5, 5, 5, 5), borderwidth=5, relief="groove")
         self.mainframe.grid(column=0, row=0, sticky=(N, W, E, S))
         self.mainframe.columnconfigure(0, weight=2)
@@ -64,16 +84,60 @@ class CmdGUI:
         self.enterbutton.grid(column=1, row=0, sticky=(N, W, E, S))
 
         # Redirect stdout to text output frame
-        txtframe = Redirect(self.txtoutput)
-        sys.stdout = txtframe
+        self.txtframe = Redirect(self.txtoutput)
+        sys.stdout = self.txtframe
 
-    def onenter(self):  # TODO: Run if Enter key pressed
-        # Runs the code (value) of the given command (key)
+    def onenter(self):  # TODO: Run if Enter key pressed, loop manager, cmd params, clear box, default commands
+        """
+        Places the code (value) of the given command (key) into the process queue
+        """
+        global process_queue
         cmd = self.txtinput.get("1.0", "end -1c").strip().lower()
         if cmd in self.commands.keys():
-            exec(self.commands[cmd]())  # TODO: Threading for looping commands
+            process_queue.put(self.commands[cmd]())
         else:
-            print("Invalid Command")
+            print("Invalid Command")  # TODO: Secondary error display using label
+
+    def print_manager(self):
+        """
+        Prints all lines in the print queue, then calls the process manager via process thread
+        """
+        global print_queue
+
+        try:
+            for line in iter(print_queue.get, None):
+                self.txtframe.output.insert(END, str(line))
+            self.root.after(1000, self.printer_thread())
+        except print_queue.empty():
+            self.root.after(1000, self.process_thread())
+
+    def process_manager(self):
+        """
+        Executes a single process in the process queue then waits for print manager to be done
+        """
+        global process_queue
+
+        try:
+            proc = process_queue.get()
+            exec(proc)
+            proc.task_done()
+            self.root.after(1000, self.printer_thread())
+        except process_queue.empty():
+            pass
+
+    def printer_thread(self):
+        """
+        Starts a thread for print_manager
+        """
+        t = threading.Thread(target=self.print_manager)
+        t.start()
+
+    def process_thread(self):
+        """
+        Starts a thread for process_manager
+        """
+        t = threading.Thread(target=self.process_manager)
+        t.start()
 
 
 if __name__ == "__main__":  # TODO: Create demo app here
