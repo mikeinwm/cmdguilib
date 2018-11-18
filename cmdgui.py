@@ -8,6 +8,7 @@ import queue
 import threading
 from tkinter import *
 from tkinter import ttk
+from tkinter import scrolledtext
 
 # Create queue which holds items to be printed to gui textbox
 print_queue = queue.Queue()
@@ -42,13 +43,13 @@ class CmdGUI:
     Handles gui creation and interactions
     Arg: commands = dictionary of text command : code to run
     """
-    def __init__(self, commands):
+    def __init__(self, wintitle="CmdGUI Window"):
+        self.commands = {}
+        self.wintitle = wintitle
 
-        self.commands = commands
-
-        # Create main window # TODO: Themes and Styles
+        # Create main window # TODO: Themes and Styles, minimize to tray?
         self.root = Tk()
-        self.root.title("CmdGUI Window")  # TODO: Set title with argument
+        self.root.title(self.wintitle)
         self.root.grid()
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -72,7 +73,7 @@ class CmdGUI:
         self.inframe.rowconfigure(0, weight=2)
 
         # Create Text output widget
-        self.txtoutput = Text(self.outframe, wrap="word")
+        self.txtoutput = scrolledtext.ScrolledText(self.outframe, wrap="word", state="disabled")
         self.txtoutput.grid(column=0, row=0, sticky=(N, W, E, S))
 
         # Create Text input widget
@@ -87,16 +88,22 @@ class CmdGUI:
         self.txtframe = Redirect(self.txtoutput)
         sys.stdout = self.txtframe
 
-    def onenter(self):  # TODO: Run if Enter key pressed, loop manager, cmd params, clear box, default commands
+    def onenter(self):  # TODO: Run if Enter key pressed, loop manager, cmd params, default commands, cmd creation
         """
         Places the code (value) of the given command (key) into the process queue
         """
         global process_queue
         cmd = self.txtinput.get("1.0", "end -1c").strip().lower()
         if cmd in self.commands.keys():
-            process_queue.put(self.commands[cmd]())
+            process_queue.put(self.commands[cmd])
         else:
             print("Invalid Command")  # TODO: Secondary error display using label
+
+    def text_clear(self, txtbox):
+        """
+        Clears text area of given box.
+        """
+        txtbox.delete("1.0", END)
 
     def print_manager(self):
         """
@@ -106,7 +113,9 @@ class CmdGUI:
 
         try:
             for line in iter(print_queue.get, None):
+                self.txtoutput['state'] = 'normal'  # Sets the text output box to editable
                 self.txtframe.output.insert(END, str(line))
+                self.txtoutput['state'] = 'disabled'  # Sets the text output box to non-editable
             self.root.after(1000, self.printer_thread())
         except print_queue.empty():
             self.root.after(1000, self.process_thread())
@@ -119,8 +128,7 @@ class CmdGUI:
 
         try:
             proc = process_queue.get()
-            exec(proc)
-            proc.task_done()
+            self.proc_exec(proc())
             self.root.after(1000, self.printer_thread())
         except process_queue.empty():
             pass
@@ -129,17 +137,42 @@ class CmdGUI:
         """
         Starts a thread for print_manager
         """
-        t = threading.Thread(target=self.print_manager)
-        t.start()
+        p = threading.Thread(target=self.print_manager)
+        p.start()
 
-    def process_thread(self):
+    def process_thread(self):  # TODO: Allow one process to complete before starting next (no open process threads)
         """
         Starts a thread for process_manager
         """
         t = threading.Thread(target=self.process_manager)
         t.start()
 
+    def proc_exec(self, task):  # TODO: Condense printer_thread, process_thread, and proc_exec
+        """
+        Runs designated process with threading
+        """
+        tp = threading.Thread(target=task)
+        tp.start()
+
 
 if __name__ == "__main__":  # TODO: Create demo app here
-    app = CmdGUI(commands={})
-    app.root.mainloop()
+    from time import time
+
+    demo = CmdGUI(wintitle="CmdGUI Demo")
+
+    def infloop_test():
+        demo.text_clear(demo.txtoutput)
+        print(time())
+
+    def forloop_test():
+        for i in range(10):
+            print("This is step i")
+
+    def single_test():
+        print("This is a single line of text.")
+
+    demo.commands['infloop'] = infloop_test()
+    demo.commands['forloop'] = forloop_test()
+    demo.commands['single'] = single_test()
+
+    demo.root.mainloop()
