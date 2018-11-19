@@ -1,7 +1,6 @@
 """
 Library for quickly converting a console application into a gui application.
 Includes threading and queues, custom commands, and redirecting stdout.
-All non-looping processes wait for printing to complete.
 """
 
 import queue
@@ -10,42 +9,45 @@ from tkinter import *
 from tkinter import ttk
 from tkinter import scrolledtext
 
-# Create queue which holds items to be printed to gui textbox
-print_queue = queue.Queue()
 
-# Create queue which holds code to be processed
-process_queue = queue.Queue()
+class TScrolledText(scrolledtext.ScrolledText):
+    def __init__(self, master, **options):
+        scrolledtext.ScrolledText.__init__(self, master, **options)
+        self.text_queue = queue.Queue()
+        self.update_me()
 
+    def write(self, line):
+        self.text_queue.put(line)
 
-class Redirect:
-    """
-    Redirects the text output from print statements, and places them in print queue
-    """
-    def __init__(self, target):
+    def clear(self):
+        self.config(state="normal")
+        self.delete(1.0, END)
+        self.config(state="disabled")
 
-        self.output = target
-
-    @staticmethod
-    def write(txt):
-        """
-        Inserts captured output into text area on gui
-        """
-        global print_queue
-        print_queue.put(str(txt))
-        # self.output.insert(END, str(txt)) # print to gui without threading or queue
-
-    def flush(self):  # TODO: Handle stdout and stderr functions
+    def flush(self):
         pass
+
+    def update_me(self):
+        if not self.text_queue.empty():
+            line = self.text_queue.get_nowait()
+            self["state"] = "normal"
+            self.insert(END, str(line))
+            self["state"] = "disabled"
+            self.see(END)
+            self.update_idletasks()
+        else:
+            pass
+        self.after(100, self.update_me)
 
 
 class CmdGUI:
     """
     Handles gui creation and interactions
-    Arg: commands = dictionary of text command : code to run
     """
-    def __init__(self, wintitle="CmdGUI Window"):
-        self.commands = {}
-        self.wintitle = wintitle
+    def __init__(self):
+        self.commands = {}  # TODO: Disable most commands option for running a loop
+        self.defaults = {}
+        self.wintitle = "CmdGUI Window"
 
         # Create main window # TODO: Themes and Styles, minimize to tray?
         self.root = Tk()
@@ -73,7 +75,7 @@ class CmdGUI:
         self.inframe.rowconfigure(0, weight=2)
 
         # Create Text output widget
-        self.txtoutput = scrolledtext.ScrolledText(self.outframe, wrap="word", state="disabled")
+        self.txtoutput = TScrolledText(self.outframe, wrap="word", state="disabled")
         self.txtoutput.grid(column=0, row=0, sticky=(N, W, E, S))
 
         # Create Text input widget
@@ -84,95 +86,61 @@ class CmdGUI:
         self.enterbutton = Button(self.inframe, text="Enter", command=self.onenter)
         self.enterbutton.grid(column=1, row=0, sticky=(N, W, E, S))
 
-        # Redirect stdout to text output frame
-        self.txtframe = Redirect(self.txtoutput)
-        sys.stdout = self.txtframe
+        # Redirect stdout to gui
+        sys.stdout = self.txtoutput
 
-    def onenter(self):  # TODO: Run if Enter key pressed, loop manager, cmd params, default commands, cmd creation
+    def onenter(self):  # TODO: Run if Enter key pressed, cmd params, default commands, cmd creation
         """
-        Places the code (value) of the given command (key) into the process queue
+        Sends the value (function) of key (command) to be run by proc_exec.
         """
-        global process_queue
         cmd = self.txtinput.get("1.0", "end -1c").strip().lower()
         if cmd in self.commands.keys():
-            process_queue.put(self.commands[cmd])
+            self.proc_exec(self.commands[cmd])
+        elif cmd in self.defaults.keys():
+            self.proc_exec(self.defaults[cmd])
         else:
             print("Invalid Command")  # TODO: Secondary error display using label
 
-    def text_clear(self, txtbox):
+    def proc_exec(self, task):
         """
-        Clears text area of given box.
-        """
-        txtbox.delete("1.0", END)
-
-    def print_manager(self):
-        """
-        Prints all lines in the print queue, then calls the process manager via process thread
-        """
-        global print_queue
-
-        try:
-            for line in iter(print_queue.get, None):
-                self.txtoutput['state'] = 'normal'  # Sets the text output box to editable
-                self.txtframe.output.insert(END, str(line))
-                self.txtoutput['state'] = 'disabled'  # Sets the text output box to non-editable
-            self.root.after(1000, self.printer_thread())
-        except print_queue.empty():
-            self.root.after(1000, self.process_thread())
-
-    def process_manager(self):
-        """
-        Executes a single process in the process queue then waits for print manager to be done
-        """
-        global process_queue
-
-        try:
-            proc = process_queue.get()
-            self.proc_exec(proc())
-            self.root.after(1000, self.printer_thread())
-        except process_queue.empty():
-            pass
-
-    def printer_thread(self):
-        """
-        Starts a thread for print_manager
-        """
-        p = threading.Thread(target=self.print_manager)
-        p.start()
-
-    def process_thread(self):  # TODO: Allow one process to complete before starting next (no open process threads)
-        """
-        Starts a thread for process_manager
-        """
-        t = threading.Thread(target=self.process_manager)
-        t.start()
-
-    def proc_exec(self, task):  # TODO: Condense printer_thread, process_thread, and proc_exec
-        """
-        Runs designated process with threading
+        Runs designated function with threading
         """
         tp = threading.Thread(target=task)
         tp.start()
 
 
-if __name__ == "__main__":  # TODO: Create demo app here
-    from time import time
+if __name__ == "__main__":
+    from time import strftime
 
-    demo = CmdGUI(wintitle="CmdGUI Demo")
+    demo = CmdGUI()
+    demo.wintitle = "CmdGUI Demo"
+    stop = False
 
-    def infloop_test():
-        demo.text_clear(demo.txtoutput)
-        print(time())
+    def infloop_test():  # TODO: Only delete and update changed values
+        global stop
+        if not stop:
+            demo.txtoutput.clear()
+            print(strftime("%c",))
+            print("Type stop and press enter to stop the loop.")
+            demo.txtoutput.after(1000, infloop_test)
+        else:
+            print("Time loop has been stopped.")
+            stop = False
+
+    def end_loop():
+        global stop
+        stop = True
 
     def forloop_test():
         for i in range(10):
-            print("This is step i")
+            print("This is step " + str(i) + ".")
 
     def single_test():
         print("This is a single line of text.")
 
-    demo.commands['infloop'] = infloop_test()
-    demo.commands['forloop'] = forloop_test()
-    demo.commands['single'] = single_test()
+    demo.commands['infloop'] = infloop_test
+    demo.commands["stop"] = end_loop
+    demo.commands['forloop'] = forloop_test
+    demo.commands['single'] = single_test
 
     demo.root.mainloop()
