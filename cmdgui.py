@@ -7,7 +7,6 @@ import threading
 from tkinter import *
 from tkinter import ttk
 from tkinter import scrolledtext
-from tkinter import simpledialog
 
 
 class TScrolledText(scrolledtext.ScrolledText):
@@ -55,12 +54,12 @@ class CmdGUI:
     Handles gui creation and interactions
     """
     def __init__(self):
-        self.commands = {"help": self.help_menu}  # Commands to run when nothing is running
+        self.commands = {"help": self.help_menu, "themes": self.list_themes}  # Commands to run when nothing is running
         self.defaults = {}  # Commands always available (during loops)
         self.loop_in_progress = False
         self.wintitle = "CmdGUI Window"
 
-        # Create main window # TODO: Themes and Styles
+        # Create main window # TODO: Custom Themes
         self.root = Tk()
         self.root.title(self.wintitle)
         self.root.grid()
@@ -113,7 +112,10 @@ class CmdGUI:
 
         self.txtinput.focus_set()
 
-    def onenter(self, event=None):  # TODO: cmd params needs command creation class?
+        self.theme = ttk.Style()
+        self.theme.theme_use('alt')
+
+    def onenter(self, event=None):  # TODO: Explore creating commands using a class
         """
         Sends the value (function) of key (command) to be run by proc_exec.
         """
@@ -157,7 +159,13 @@ class CmdGUI:
         print("Special commands list:")
         print(list(self.defaults.keys()))
 
+    def list_themes(self):
+        print(self.theme.theme_names())
 
+
+"""
+The below code is included as a demo of the library.
+"""
 if __name__ == "__main__":
     from time import strftime
 
@@ -212,9 +220,9 @@ if __name__ == "__main__":
         for i in range(10):
             print("This is step " + str(i) + ".")
 
-    def say():
-        txt = simpledialog.askstring("Input", "Say what?", parent=demo.root)  # TODO: Bug: Thread ends before var saved
-        print(txt)
+    def say(*args):  # Very basic attempt at using arguments with commands, treats anything after say as text
+
+        print(*args)
 
 
     # Create commands to be typed to run each function
