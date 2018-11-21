@@ -2,12 +2,12 @@
 Library for quickly converting a console application into a gui application.
 Includes threading and queues, custom commands, and redirecting stdout.
 """
-
 import queue
 import threading
 from tkinter import *
 from tkinter import ttk
 from tkinter import scrolledtext
+from tkinter import simpledialog
 
 
 class TScrolledText(scrolledtext.ScrolledText):
@@ -32,7 +32,8 @@ class TScrolledText(scrolledtext.ScrolledText):
 
     def flush(self):
         """
-        This replaces stdout.flush  # TODO: Add any necessary function
+        This replaces stdout.flush
+        Unused by queue
         """
         pass
 
@@ -88,6 +89,7 @@ class CmdGUI:
         # Create Text output widget
         self.txtoutput = TScrolledText(self.outframe, wrap="word", state="disabled")
         self.txtoutput.grid(column=0, row=0, sticky=(N, W, E, S))
+        self.commands['clear'] = self.txtoutput.clear
 
         # Create label for user messages
         self.usermsg = StringVar()
@@ -107,18 +109,20 @@ class CmdGUI:
 
         # Redirect stdout to gui
         sys.stdout = self.txtoutput
+        sys.stderr = sys.stdout
 
         self.txtinput.focus_set()
 
-    def onenter(self, event=None):  # TODO: cmd params, default commands, cmd creation
+    def onenter(self, event=None):  # TODO: cmd params needs command creation class?
         """
         Sends the value (function) of key (command) to be run by proc_exec.
         """
-        cmd = self.txtinput.get("1.0", "end -1c").strip().lower()
+        cmd = self.txtinput.get("1.0", "1.0 wordend").strip().lower()
+        cmd_arg = self.txtinput.get("1.0 wordend +1c", "end -1c")
         if cmd in self.commands.keys() and not self.loop_in_progress:
-            self.proc_exec(self.commands[cmd])
+            self.proc_exec(self.commands[cmd], arg=cmd_arg)
         elif cmd in self.defaults.keys():
-            self.proc_exec(self.defaults[cmd])
+            self.proc_exec(self.defaults[cmd], arg=cmd_arg)
         else:
             self.usermsg.set("Invalid Command")
         self.txtinput.delete(1.0, END)
@@ -128,9 +132,10 @@ class CmdGUI:
         """
         Runs designated function with threading
         """
-        if arg is None:
-            arg = []
-        tp = threading.Thread(target=task, args=arg)
+        if arg is None or arg is "":
+            tp = threading.Thread(target=task)
+        else:
+            tp = threading.Thread(target=task, args=(arg,))
         tp.start()
 
     def reset_msg(self, *args):
@@ -207,14 +212,15 @@ if __name__ == "__main__":
         for i in range(10):
             print("This is step " + str(i) + ".")
 
-    def single_test():
-        print("This is a single line of text.")
+    def say():
+        txt = simpledialog.askstring("Input", "Say what?", parent=demo.root)  # TODO: Bug: Thread ends before var saved
+        print(txt)
 
 
     # Create commands to be typed to run each function
     demo.commands['infloop'] = infloop_test
     demo.defaults["stop"] = end_loop
     demo.commands['forloop'] = forloop_test
-    demo.commands['single'] = single_test
+    demo.commands['say'] = say
 
     demo.root.mainloop()
