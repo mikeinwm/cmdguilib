@@ -54,7 +54,7 @@ class CmdGUI:
     Handles gui creation and interactions
     """
     def __init__(self):
-        self.commands = {}  # Commands to run when nothing is running
+        self.commands = {"help": self.help_menu}  # Commands to run when nothing is running
         self.defaults = {}  # Commands always available (during loops)
         self.loop_in_progress = False
         self.wintitle = "CmdGUI Window"
@@ -65,6 +65,7 @@ class CmdGUI:
         self.root.grid()
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
+        self.root.minsize(width=472, height=348)
 
         # Create Frame covering entire window (for styling, no practical use)
         self.mainframe = ttk.Frame(self.root, padding=(5, 5, 5, 5), borderwidth=5, relief="groove")
@@ -102,10 +103,12 @@ class CmdGUI:
 
         # Create enter/submit button
         self.enterbutton = Button(self.inframe, text="Enter", command=self.onenter)
-        self.enterbutton.grid(column=1, row=0, sticky=(N, W, E, S))
+        self.enterbutton.grid(column=1, row=1, sticky=(N, W, E, S))
 
         # Redirect stdout to gui
         sys.stdout = self.txtoutput
+
+        self.txtinput.focus_set()
 
     def onenter(self, event=None):  # TODO: cmd params, default commands, cmd creation
         """
@@ -141,6 +144,13 @@ class CmdGUI:
     def reset_msg2(self):
         self.usermsg.set("Please enter a command. (type help for a list)")
         self.usermsg_traceid = self.usermsg.trace("w", self.reset_msg)
+
+    def help_menu(self):
+        self.txtoutput.clear()
+        print("Regular commands list:")
+        print(list(self.commands.keys()))
+        print("Special commands list:")
+        print(list(self.defaults.keys()))
 
 
 if __name__ == "__main__":
@@ -199,6 +209,7 @@ if __name__ == "__main__":
 
     def single_test():
         print("This is a single line of text.")
+
 
     # Create commands to be typed to run each function
     demo.commands['infloop'] = infloop_test
