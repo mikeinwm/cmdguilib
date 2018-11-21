@@ -54,8 +54,9 @@ class CmdGUI:
     Handles gui creation and interactions
     """
     def __init__(self):
-        self.commands = {}  # TODO: Disable most commands option - for running a loop
-        self.defaults = {}
+        self.commands = {}  # Commands to run when nothing is running
+        self.defaults = {}  # Commands always available (during loops)
+        self.loop_in_progress = False
         self.wintitle = "CmdGUI Window"
 
         # Create main window # TODO: Themes and Styles
@@ -87,10 +88,17 @@ class CmdGUI:
         self.txtoutput = TScrolledText(self.outframe, wrap="word", state="disabled")
         self.txtoutput.grid(column=0, row=0, sticky=(N, W, E, S))
 
+        # Create label for user messages
+        self.usermsg = StringVar()
+        self.usermsg.set("Please enter a command. (type help for a list)")
+        self.usermsg_traceid = self.usermsg.trace("w", self.reset_msg)
+        self.msglabel = Label(self.inframe, textvariable=self.usermsg)
+        self.msglabel.grid(column=0, row=0, sticky=(W, N, E))
+
         # Create Text input widget
         self.txtinput = Text(self.inframe, height=4, wrap="word")
-        self.txtinput.grid(column=0, row=0, sticky=(N, W, E, S))
-        self.txtinput.bind("<Return>", self.onenter)
+        self.txtinput.grid(column=0, row=1, sticky=(W, E, S))
+        self.txtinput.bind("<Return>", self.onenter)  # Send command when pressing enter
 
         # Create enter/submit button
         self.enterbutton = Button(self.inframe, text="Enter", command=self.onenter)
@@ -104,21 +112,35 @@ class CmdGUI:
         Sends the value (function) of key (command) to be run by proc_exec.
         """
         cmd = self.txtinput.get("1.0", "end -1c").strip().lower()
-        if cmd in self.commands.keys():
+        if cmd in self.commands.keys() and not self.loop_in_progress:
             self.proc_exec(self.commands[cmd])
         elif cmd in self.defaults.keys():
             self.proc_exec(self.defaults[cmd])
         else:
-            print("Invalid Command")  # TODO: Secondary error display using label
+            self.usermsg.set("Invalid Command")
         self.txtinput.delete(1.0, END)
         return 'break'
 
-    def proc_exec(self, task):
+    def proc_exec(self, task, arg=None):
         """
         Runs designated function with threading
         """
-        tp = threading.Thread(target=task)
+        if arg is None:
+            arg = []
+        tp = threading.Thread(target=task, args=arg)
         tp.start()
+
+    def reset_msg(self, *args):
+        """
+        Changes msglabel for 3 seconds, then back.
+        """
+        self.usermsg.trace_vdelete("w", self.usermsg_traceid)
+        t_msg = threading.Timer(3.0, self.reset_msg2)
+        t_msg.start()
+
+    def reset_msg2(self):
+        self.usermsg.set("Please enter a command. (type help for a list)")
+        self.usermsg_traceid = self.usermsg.trace("w", self.reset_msg)
 
 
 if __name__ == "__main__":
@@ -136,7 +158,7 @@ if __name__ == "__main__":
         """
         demo.txtoutput.clear()
         print(strftime("%a - %b %d, %Y  %H:%M:%S"))
-        print("Type stop and press enter to stop the loop.")
+        demo.usermsg.set("Type stop and press enter to stop the loop.")
         infloop_test2()
 
     def infloop_test2():
@@ -144,6 +166,7 @@ if __name__ == "__main__":
         Updates the time display every 500ms until stop command is given.
         """
         global stop
+        demo.loop_in_progress = True
 
         if not stop:
             curtime = strftime("%a - %b %d, %Y  %H:%M:%S")
@@ -159,7 +182,8 @@ if __name__ == "__main__":
                     demo.txtoutput.config(state="disabled")
             demo.txtoutput.after(500, infloop_test2)  # Calls infloop_test2 over again after 500ms
         else:
-            print("Time loop has been stopped.")
+            demo.usermsg.set("Time loop has been stopped.")
+            demo.loop_in_progress = False
             stop = False
 
     def end_loop():
@@ -178,7 +202,7 @@ if __name__ == "__main__":
 
     # Create commands to be typed to run each function
     demo.commands['infloop'] = infloop_test
-    demo.commands["stop"] = end_loop
+    demo.defaults["stop"] = end_loop
     demo.commands['forloop'] = forloop_test
     demo.commands['single'] = single_test
 
